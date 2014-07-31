@@ -38,3 +38,7 @@ FILES_${PN} = "${bindir}/xwalk-example ${datadir}/applications/* ${libdir}/xwalk
 FILES_${PN}-dbg = "${libdir}/xwalk-example/.debug/"
 
 PACKAGE_DEBUG_SPLIT_STYLE = "debug-without-src"
+
+inherit pax-exception
+
+PAX_EXCEPTIONS = "${libdir}/xwalk-example/libcpu.so:m"

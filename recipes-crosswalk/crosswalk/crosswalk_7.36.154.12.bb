@@ -305,12 +305,13 @@ LIC_FILES_CHKSUM = "file://${S}/xwalk/LICENSE;md5=c3d4637b0c8ceffb4111debb006efe
     file://${S}/v8/LICENSE;md5=4fbc731ec49a1773a0db52c6b0eabb87 \
     file://${S}/webkit/LICENSE;md5=11e90d553b211de885f245900c4ccf89"
 
-DEPENDS = "ninja-native pkgconfig-native gtk+ glib-2.0 pulseaudio libxss libdrm nss elfutils libxslt icu fontconfig harfbuzz"
+DEPENDS = "ninja-native pkgconfig-native gtk+ glib-2.0 libxss libdrm elfutils libxslt icu fontconfig openssl alsa-lib"
 
 SRC_URI += "https://download.01.org/crosswalk/releases/crosswalk/source/crosswalk-${PV}.tar.xz;name=tarball \
     file://use_window_manager_native_decorations.patch;patch=1 \
     file://include.gypi \
-    file://defaults.gypi"
+    file://defaults.gypi \
+    file://mtdev.gypi"
 
 SRC_URI[tarball.md5sum] = "b20ebbbb6f87799ab861f0f1065cebbb"
 SRC_URI[tarball.sha256sum] = "d9d925302c7091f1febd7dda93f6fd1aa041e2760fa90ec76f34c5eefa134f18"
@@ -322,6 +323,9 @@ COMPATIBLE_MACHINE_armv6 = "(.*)"
 COMPATIBLE_MACHINE_armv7a = "(.*)"
 
 inherit gettext
+
+GYPI_INCLUDES = "-I${WORKDIR}/defaults.gypi -I${WORKDIR}/include.gypi"
+GYPI_INCLUDES_append_multitouch = " -I${WORKDIR}/mtdev.gypi"
 
 do_configure() {
     cd ${S}
@@ -335,7 +339,7 @@ do_configure() {
     export CC_host="gcc"
     export CXX_host="g++"
 
-    xwalk/gyp_xwalk --depth=. -I${WORKDIR}/defaults.gypi -I${WORKDIR}/include.gypi
+    xwalk/gyp_xwalk --depth=. ${GYPI_INCLUDES}
 }
 
 do_compile() {
@@ -358,3 +362,10 @@ FILES_${PN} = "${bindir}/xwalk ${libdir}/xwalk/*"
 FILES_${PN}-dbg = "${bindir}/.debug/ ${libdir}/xwalk/.debug/"
 
 PACKAGE_DEBUG_SPLIT_STYLE = "debug-without-src"
+
+inherit pax-exception
+
+PAX_EXCEPTIONS = "\
+    ${libdir}/xwalk/xwalk:m \
+    ${libdir}/xwalk/libffmpegsumo.so:m \
+    ${libdir}/xwalk/libosmesa.so:m"
