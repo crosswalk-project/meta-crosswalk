@@ -1,4 +1,5 @@
-DESCRIPTION = "Crosswalk is a web runtime for ambitious HTML5 applications."
+SUMMARY = "Runtime for hosted and packaged apps"
+DESCRIPTION = "The Crosswalk Project is an HTML5 application runtime, built on open source foundations, which extends the web platform with new capabilities."
 HOMEPAGE = "https://crosswalk-project.org/"
 
 # Crosswalk and Chromium own code.
