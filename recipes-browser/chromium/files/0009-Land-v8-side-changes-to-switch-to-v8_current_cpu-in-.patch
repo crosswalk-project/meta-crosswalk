@@ -1,0 +1,263 @@
+Upstream-Status: Backport
+
+[reworked for M52, this is actually patch for the v8 git repository]
+
+also includes 78f813c1e436da5bbb044a503d75e3c0baae9b8c which is a
+one-liner fix to build_overrides/v8.gni.
+
+Signed-off-by: Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
+---
+From 6c3aaae96964f2605562a211e52fc9e0928fd6c7 Mon Sep 17 00:00:00 2001
+From: dpranke <dpranke@chromium.org>
+Date: Fri, 15 Jul 2016 15:32:55 -0700
+Subject: [PATCH] Land v8-side changes to switch to v8_current_cpu in the GN
+ build.
+
+This change makes  the architecture that we target generated
+v8 code for a property of the current toolchain, rather than a
+global setting that applies to every toolchain.
+
+This will allow us to properly build two snapshots for two different
+architectures in a single build, which is needed for android
+webview/monochrome builds.
+
+R=brettw@chromium.org, jochen@chromium.org, michaelbai@chromium.org
+BUG=625383
+
+Review-Url: https://codereview.chromium.org/2116913002
+Cr-Commit-Position: refs/heads/master@{#37805}
+---
+ BUILD.gn                | 30 +++++++++++++--------------
+ build_overrides/v8.gni  | 10 ++++-----
+ gni/v8.gni              |  2 +-
+ snapshot_toolchain.gni  | 55 +++++++++++++++++++++----------------------------
+ test/cctest/BUILD.gn    | 28 ++++++++++++-------------
+ test/unittests/BUILD.gn | 16 +++++++-------
+ 6 files changed, 67 insertions(+), 74 deletions(-)
+
+diff --git a/v8/BUILD.gn b/v8/BUILD.gn
+index eec472f..e298a31 100644
+--- a/v8/BUILD.gn
++++ b/v8/BUILD.gn
+@@ -186,7 +186,7 @@ config("toolchain") {
+   defines = []
+   cflags = []
+ 
+-  if (v8_target_cpu == "arm") {
++  if (v8_current_cpu == "arm") {
+     defines += [ "V8_TARGET_ARCH_ARM" ]
+     if (arm_version == 7) {
+       defines += [ "CAN_USE_ARMV7_INSTRUCTIONS" ]
+@@ -217,12 +217,12 @@ config("toolchain") {
+       }
+     }
+   }
+-  if (v8_target_cpu == "arm64") {
++  if (v8_current_cpu == "arm64") {
+     defines += [ "V8_TARGET_ARCH_ARM64" ]
+   }
+ 
+   # TODO(jochen): Add support for mips.
+-  if (v8_target_cpu == "mipsel") {
++  if (v8_current_cpu == "mipsel") {
+     defines += [ "V8_TARGET_ARCH_MIPS" ]
+     if (v8_can_use_fpu_instructions) {
+       defines += [ "CAN_USE_FPU_INSTRUCTIONS" ]
+@@ -257,7 +257,7 @@ config("toolchain") {
+   }
+ 
+   # TODO(jochen): Add support for mips64.
+-  if (v8_target_cpu == "mips64el") {
++  if (v8_current_cpu == "mips64el") {
+     defines += [ "V8_TARGET_ARCH_MIPS64" ]
+     if (v8_can_use_fpu_instructions) {
+       defines += [ "CAN_USE_FPU_INSTRUCTIONS" ]
+@@ -279,19 +279,19 @@ config("toolchain") {
+       defines += [ "_MIPS_ARCH_MIPS64R2" ]
+     }
+   }
+-  if (v8_target_cpu == "s390") {
++  if (v8_current_cpu == "s390") {
+     defines += [ "V8_TARGET_ARCH_S390" ]
+   }
+-  if (v8_target_cpu == "s390x") {
++  if (v8_current_cpu == "s390x") {
+     defines += [
+       "V8_TARGET_ARCH_S390",
+       "V8_TARGET_ARCH_S390X",
+     ]
+   }
+-  if (v8_target_cpu == "x86") {
++  if (v8_current_cpu == "x86") {
+     defines += [ "V8_TARGET_ARCH_IA32" ]
+   }
+-  if (v8_target_cpu == "x64") {
++  if (v8_current_cpu == "x64") {
+     defines += [ "V8_TARGET_ARCH_X64" ]
+   }
+ 
+@@ -1519,7 +1519,7 @@ v8_source_set("v8_base") {
+     "src/zone.h",
+   ]
+ 
+-  if (v8_target_cpu == "x86") {
++  if (v8_current_cpu == "x86") {
+     sources += [
+       "src/compiler/ia32/code-generator-ia32.cc",
+       "src/compiler/ia32/instruction-codes-ia32.h",
+@@ -1557,7 +1557,7 @@ v8_source_set("v8_base") {
+       "src/regexp/ia32/regexp-macro-assembler-ia32.cc",
+       "src/regexp/ia32/regexp-macro-assembler-ia32.h",
+     ]
+-  } else if (v8_target_cpu == "x64") {
++  } else if (v8_current_cpu == "x64") {
+     sources += [
+       "src/compiler/x64/code-generator-x64.cc",
+       "src/compiler/x64/instruction-codes-x64.h",
+@@ -1595,7 +1595,7 @@ v8_source_set("v8_base") {
+       "src/x64/macro-assembler-x64.cc",
+       "src/x64/macro-assembler-x64.h",
+     ]
+-  } else if (v8_target_cpu == "arm") {
++  } else if (v8_current_cpu == "arm") {
+     sources += [
+       "src/arm/assembler-arm-inl.h",
+       "src/arm/assembler-arm.cc",
+@@ -1638,7 +1638,7 @@ v8_source_set("v8_base") {
+       "src/regexp/arm/regexp-macro-assembler-arm.cc",
+       "src/regexp/arm/regexp-macro-assembler-arm.h",
+     ]
+-  } else if (v8_target_cpu == "arm64") {
++  } else if (v8_current_cpu == "arm64") {
+     sources += [
+       "src/arm64/assembler-arm64-inl.h",
+       "src/arm64/assembler-arm64.cc",
+@@ -1694,7 +1694,7 @@ v8_source_set("v8_base") {
+       "src/regexp/arm64/regexp-macro-assembler-arm64.cc",
+       "src/regexp/arm64/regexp-macro-assembler-arm64.h",
+     ]
+-  } else if (v8_target_cpu == "mipsel") {
++  } else if (v8_current_cpu == "mipsel") {
+     sources += [
+       "src/compiler/mips/code-generator-mips.cc",
+       "src/compiler/mips/instruction-codes-mips.h",
+@@ -1736,7 +1736,7 @@ v8_source_set("v8_base") {
+       "src/regexp/mips/regexp-macro-assembler-mips.cc",
+       "src/regexp/mips/regexp-macro-assembler-mips.h",
+     ]
+-  } else if (v8_target_cpu == "mips64el") {
++  } else if (v8_current_cpu == "mips64el") {
+     sources += [
+       "src/compiler/mips64/code-generator-mips64.cc",
+       "src/compiler/mips64/instruction-codes-mips64.h",
+@@ -1778,7 +1778,7 @@ v8_source_set("v8_base") {
+       "src/regexp/mips64/regexp-macro-assembler-mips64.cc",
+       "src/regexp/mips64/regexp-macro-assembler-mips64.h",
+     ]
+-  } else if (v8_target_cpu == "s390" || v8_target_cpu == "s390x") {
++  } else if (v8_current_cpu == "s390" || v8_current_cpu == "s390x") {
+     sources += [
+       "src/compiler/s390/code-generator-s390.cc",
+       "src/compiler/s390/instruction-codes-s390.h",
+diff --git a/v8/build_overrides/v8.gni b/v8/build_overrides/v8.gni
+index 7ba4d58..05c542a 100644
+--- a/v8/build_overrides/v8.gni
++++ b/v8/build_overrides/v8.gni
+@@ -11,12 +11,12 @@ if (is_android) {
+   import("//build/config/android/config.gni")
+ }
+ 
+-if (((v8_target_cpu == "x86" ||
+-      v8_target_cpu == "x64" ||
+-      v8_target_cpu=="x87") &&
++if (((v8_current_cpu == "x86" ||
++      v8_current_cpu == "x64" ||
++      v8_current_cpu=="x87") &&
+      (is_linux || is_mac)) ||
+-    (v8_target_cpu == "ppc64" && is_linux)) {
+-  v8_enable_gdbjit_default = true
++    (v8_current_cpu == "ppc64" && is_linux)) {
++  v8_enable_gdbjit_default = true
+ }
+ 
+ v8_imminent_deprecation_warnings_default = true
+diff --git a/v8/snapshot_toolchain.gni b/v8/snapshot_toolchain.gni
+index ccee7ff..824e7e0 100644
+--- a/v8/snapshot_toolchain.gni
++++ b/v8/snapshot_toolchain.gni
+@@ -25,6 +25,8 @@
+ # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+ # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ 
++import("//build/config/v8_target_cpu.gni")
++
+ declare_args() {
+   # The snapshot needs to be compiled for the host, but compiled with
+   # a toolchain that matches the bit-width of the target.
+@@ -36,41 +38,32 @@ declare_args() {
+ # configurations v8 runs on.
+ if (v8_snapshot_toolchain == "") {
+   if (host_cpu == "x64" && host_os == "linux") {
+-    if (target_cpu == "arm" || target_cpu == "mipsel" || target_cpu == "x86") {
+-      if (target_os == "android" || is_clang) {
+-        v8_snapshot_toolchain = "//build/toolchain/linux:clang_x86"
+-      } else if (target_os == "chromeos") {
+-        # TODO(dpranke): crbug.com/608596: Remove this clause once the
+-        # CrOS ebuilds are setting v8_snapshot_toolchain directly and
+-        # we've cleaned up the sysroot settings in //build.
+-        v8_snapshot_toolchain = "//build/toolchain/linux:clang_x86"
+-      } else {
+-        v8_snapshot_toolchain = "//build/toolchain/linux:x86"
+-      }
++    if (current_cpu == "arm" || current_cpu == "mipsel" ||
++        current_cpu == "x86") {
++      _snapshot_cpu = "x86"
++    } else {
++      assert(current_cpu == "arm64" || current_cpu == "x64" ||
++                 current_cpu == "mipsel64",
++             "Need environment for this arch: $current_cpu")
++      _snapshot_cpu = "x64"
++    }
+ 
+-    } else if (target_cpu == "x64" || target_cpu == "arm64" ||
+-               target_cpu == "mips64el") {
+-      if (target_os == "android" || is_clang) {
+-        v8_snapshot_toolchain = "//build/toolchain/linux:clang_x64"
+-      } else if (target_os == "chromeos") {
+-        # TODO(dpranke): crbug.com/608596: Remove this clause once the
+-        # CrOS ebuilds are setting v8_snapshot_toolchain directly and
+-        # we've cleaned up the sysroot settings in //build.
+-        v8_snapshot_toolchain = "//build/toolchain/linux:clang_x64"
+-      } else {
+-        v8_snapshot_toolchain = "//build/toolchain/linux:x64"
+-      }
++    if (v8_current_cpu != _snapshot_cpu) {
++      _cpus = "${_snapshot_cpu}_v8_${v8_current_cpu}"
+     } else {
+-      assert(false, "Need environment for this arch: $target_cpu")
++      _cpus = _snapshot_cpu
+     }
+-  } else if (host_os == "mac" && target_os == "win") {
+-    v8_snapshot_toolchain = "//build/toolchain/mac:clang_$target_cpu"
++
++    if ((host_os == "linux" && current_os == "android") || is_clang) {
++      v8_snapshot_toolchain = "//build/toolchain/linux:clang_${_cpus}"
++    } else {
++      v8_snapshot_toolchain = "//build/toolchain/linux:${_cpus}"
++    }
++  } else if (host_os == "mac" && current_os == "win") {
++    assert(v8_current_cpu == current_cpu,
++           "v8 target must match the regular target on this platform")
++    v8_snapshot_toolchain = "//build/toolchain/mac:clang_$current_cpu"
+   } else {
+     v8_snapshot_toolchain = default_toolchain
+   }
+ }
+-
+-# TODO(dpranke): snapshot_toolchain is provided for backwards compatibility
+-# and should be removed once all callers are updated to refer to
+-# v8_snapshot_toolchain directly.
+-snapshot_toolchain = v8_snapshot_toolchain
+-- 
+2.7.4
+

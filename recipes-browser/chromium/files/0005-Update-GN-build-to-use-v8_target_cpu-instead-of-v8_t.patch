@@ -1,0 +1,206 @@
+Upstream-Status: Backport
+
+[this is actually patch for the v8 git repository]
+
+Signed-off-by: Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
+---
+From 8756f6e90b48a38a32665f20f4093686ace5ccf3 Mon Sep 17 00:00:00 2001
+From: dpranke <dpranke@chromium.org>
+Date: Fri, 17 Jun 2016 00:06:22 -0700
+Subject: [PATCH] Update GN build to use v8_target_cpu instead of
+ v8_target_arch.
+
+R=jochen@chromium.org, machenbach@chromium.org, thakis@chromium.org
+BUG=chromium:619503
+
+Review-Url: https://codereview.chromium.org/2074003002
+Cr-Commit-Position: refs/heads/master@{#37048}
+---
+ BUILD.gn                | 30 +++++++++++++++---------------
+ build_overrides/v8.gni  |  9 +++++----
+ gni/v8.gni              | 17 +----------------
+ test/cctest/BUILD.gn    | 28 ++++++++++++++--------------
+ test/unittests/BUILD.gn | 16 ++++++++--------
+ 5 files changed, 43 insertions(+), 57 deletions(-)
+
+diff --git a/v8/BUILD.gn b/v8/BUILD.gn
+index ef24a3d..ac7f20c 100644
+--- a/v8/BUILD.gn
++++ b/v8/BUILD.gn
+@@ -186,7 +186,7 @@ config("toolchain") {
+   defines = []
+   cflags = []
+ 
+-  if (v8_target_arch == "arm") {
++  if (v8_target_cpu == "arm") {
+     defines += [ "V8_TARGET_ARCH_ARM" ]
+     if (arm_version == 7) {
+       defines += [ "CAN_USE_ARMV7_INSTRUCTIONS" ]
+@@ -217,12 +217,12 @@ config("toolchain") {
+       }
+     }
+   }
+-  if (v8_target_arch == "arm64") {
++  if (v8_target_cpu == "arm64") {
+     defines += [ "V8_TARGET_ARCH_ARM64" ]
+   }
+ 
+   # TODO(jochen): Add support for mips.
+-  if (v8_target_arch == "mipsel") {
++  if (v8_target_cpu == "mipsel") {
+     defines += [ "V8_TARGET_ARCH_MIPS" ]
+     if (v8_can_use_fpu_instructions) {
+       defines += [ "CAN_USE_FPU_INSTRUCTIONS" ]
+@@ -257,7 +257,7 @@ config("toolchain") {
+   }
+ 
+   # TODO(jochen): Add support for mips64.
+-  if (v8_target_arch == "mips64el") {
++  if (v8_target_cpu == "mips64el") {
+     defines += [ "V8_TARGET_ARCH_MIPS64" ]
+     if (v8_can_use_fpu_instructions) {
+       defines += [ "CAN_USE_FPU_INSTRUCTIONS" ]
+@@ -279,19 +279,19 @@ config("toolchain") {
+       defines += [ "_MIPS_ARCH_MIPS64R2" ]
+     }
+   }
+-  if (v8_target_arch == "s390") {
++  if (v8_target_cpu == "s390") {
+     defines += [ "V8_TARGET_ARCH_S390" ]
+   }
+-  if (v8_target_arch == "s390x") {
++  if (v8_target_cpu == "s390x") {
+     defines += [
+       "V8_TARGET_ARCH_S390",
+       "V8_TARGET_ARCH_S390X",
+     ]
+   }
+-  if (v8_target_arch == "x86") {
++  if (v8_target_cpu == "x86") {
+     defines += [ "V8_TARGET_ARCH_IA32" ]
+   }
+-  if (v8_target_arch == "x64") {
++  if (v8_target_cpu == "x64") {
+     defines += [ "V8_TARGET_ARCH_X64" ]
+   }
+ 
+@@ -1519,7 +1519,7 @@ v8_source_set("v8_base") {
+     "src/zone.h",
+   ]
+ 
+-  if (v8_target_arch == "x86") {
++  if (v8_target_cpu == "x86") {
+     sources += [
+       "src/compiler/ia32/code-generator-ia32.cc",
+       "src/compiler/ia32/instruction-codes-ia32.h",
+@@ -1557,7 +1557,7 @@ v8_source_set("v8_base") {
+       "src/regexp/ia32/regexp-macro-assembler-ia32.cc",
+       "src/regexp/ia32/regexp-macro-assembler-ia32.h",
+     ]
+-  } else if (v8_target_arch == "x64") {
++  } else if (v8_target_cpu == "x64") {
+     sources += [
+       "src/compiler/x64/code-generator-x64.cc",
+       "src/compiler/x64/instruction-codes-x64.h",
+@@ -1595,7 +1595,7 @@ v8_source_set("v8_base") {
+       "src/x64/macro-assembler-x64.cc",
+       "src/x64/macro-assembler-x64.h",
+     ]
+-  } else if (v8_target_arch == "arm") {
++  } else if (v8_target_cpu == "arm") {
+     sources += [
+       "src/arm/assembler-arm-inl.h",
+       "src/arm/assembler-arm.cc",
+@@ -1638,7 +1638,7 @@ v8_source_set("v8_base") {
+       "src/regexp/arm/regexp-macro-assembler-arm.cc",
+       "src/regexp/arm/regexp-macro-assembler-arm.h",
+     ]
+-  } else if (v8_target_arch == "arm64") {
++  } else if (v8_target_cpu == "arm64") {
+     sources += [
+       "src/arm64/assembler-arm64-inl.h",
+       "src/arm64/assembler-arm64.cc",
+@@ -1694,7 +1694,7 @@ v8_source_set("v8_base") {
+       "src/regexp/arm64/regexp-macro-assembler-arm64.cc",
+       "src/regexp/arm64/regexp-macro-assembler-arm64.h",
+     ]
+-  } else if (v8_target_arch == "mipsel") {
++  } else if (v8_target_cpu == "mipsel") {
+     sources += [
+       "src/compiler/mips/code-generator-mips.cc",
+       "src/compiler/mips/instruction-codes-mips.h",
+@@ -1736,7 +1736,7 @@ v8_source_set("v8_base") {
+       "src/regexp/mips/regexp-macro-assembler-mips.cc",
+       "src/regexp/mips/regexp-macro-assembler-mips.h",
+     ]
+-  } else if (v8_target_arch == "mips64el") {
++  } else if (v8_target_cpu == "mips64el") {
+     sources += [
+       "src/compiler/mips64/code-generator-mips64.cc",
+       "src/compiler/mips64/instruction-codes-mips64.h",
+@@ -1778,7 +1778,7 @@ v8_source_set("v8_base") {
+       "src/regexp/mips64/regexp-macro-assembler-mips64.cc",
+       "src/regexp/mips64/regexp-macro-assembler-mips64.h",
+     ]
+-  } else if (v8_target_arch == "s390" || v8_target_arch == "s390x") {
++  } else if (v8_target_cpu == "s390" || v8_target_cpu == "s390x") {
+     sources += [
+       "src/compiler/s390/code-generator-s390.cc",
+       "src/compiler/s390/instruction-codes-s390.h",
+diff --git a/v8/build_overrides/v8.gni b/v8/build_overrides/v8.gni
+index 4e0bc80..ef3d8f4 100644
+--- a/v8/build_overrides/v8.gni
++++ b/v8/build_overrides/v8.gni
+@@ -4,17 +4,18 @@
+ 
+ import("//build/config/features.gni")
+ import("//build/config/ui.gni")
++import("//build/config/v8_target_cpu.gni")
+ import("//gni/v8.gni")
+ 
+ if (is_android) {
+   import("//build/config/android/config.gni")
+ }
+ 
+-if (((v8_target_arch == "ia32" ||
+-      v8_target_arch == "x64" ||
+-      v8_target_arch=="x87") &&
++if (((v8_target_cpu == "ia32" ||
++      v8_target_cpu == "x64" ||
++      v8_target_cpu=="x87") &&
+      (is_linux || is_mac)) ||
+-    (v8_target_arch == "ppc64" && is_linux)) {
++    (v8_target_cpu == "ppc64" && is_linux)) {
+   v8_enable_gdbjit = true
+ }
+ 
+diff --git a/v8/gni/v8.gni b/v8/gni/v8.gni
+index ec943a8..ae26521 100644
+--- a/v8/gni/v8.gni
++++ b/v8/gni/v8.gni
+@@ -2,21 +2,4 @@
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-import("//build/config/sanitizers/sanitizers.gni")
+-
+-declare_args() {
+-  # V8 generates code for this architecture. If v8_target_arch differs from
+-  # target_cpu, a simulator will be run.
+-  v8_target_arch = ""
+-}
+-
+-if (v8_target_arch == "") {
+-  if (is_msan) {
+-    # Running the V8-generated code on an ARM simulator is a powerful hack that
+-    # allows the tool to see the memory accesses from JITted code. Without this
+-    # flag, JS code causes false positive reports from MSan.
+-    v8_target_arch = "arm64"
+-  } else {
+-    v8_target_arch = target_cpu
+-  }
+-}
++import("//build/config/v8_target_cpu.gni")
+-- 
+2.7.4
+

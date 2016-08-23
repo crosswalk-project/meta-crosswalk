@@ -1,0 +1,129 @@
+Upstream-Status: Backport
+
+Signed-off-by: Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
+---
+From 909e931c942774a052b493bd0061325502373f3a Mon Sep 17 00:00:00 2001
+From: dpranke <dpranke@chromium.org>
+Date: Thu, 16 Jun 2016 11:43:35 -0700
+Subject: [PATCH] Rework v8_target_arch / target_cpu approach to use
+ v8_target_cpu.
+
+This CL reworks how we get architecture-specific build args configured
+correctly so that they will be set when needed for either the
+current_cpu in the build toolchain *or* when needed to compile v8
+correctly. Eventually we should rework this so that it is a generic
+concept and not v8 specific.
+
+R=brettw@chromium.org, thakis@chromium.org, jochen@chromium.org, machenbach@chromium.org
+BUG=619503, 620527
+
+Review-Url: https://codereview.chromium.org/2070653003
+Cr-Commit-Position: refs/heads/master@{#400219}
+---
+ build/config/arm.gni           | 11 ++++++-----
+ build/config/mips.gni          | 10 ++++++++--
+ build/config/v8_target_cpu.gni | 33 +++++++++++++++++++++++++++++++++
+ 3 files changed, 47 insertions(+), 7 deletions(-)
+ create mode 100644 build/config/v8_target_cpu.gni
+
+diff --git a/build/config/arm.gni b/build/config/arm.gni
+index d16c0d2..326a49e 100644
+--- a/build/config/arm.gni
++++ b/build/config/arm.gni
+@@ -2,12 +2,13 @@
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
++import("//build/config/v8_target_cpu.gni")
++
+ # These are primarily relevant in current_cpu == "arm" contexts, where
+ # ARM code is being compiled.  But they can also be relevant in the
+-# host toolchain context when target_cpu == "arm", where a host-side
+-# build tool being built will change its behavior depending on the
+-# details of the target configuration.
+-if (target_cpu == "arm" || current_cpu == "arm") {
++# other contexts when the code will change its behavior based on the
++# cpu it wants to generate code for.
++if (current_cpu == "arm" || v8_target_cpu == "arm") {
+   declare_args() {
+     # Version of the ARM processor when compiling on ARM. Ignored on non-ARM
+     # platforms.
+@@ -86,7 +87,7 @@ if (target_cpu == "arm" || current_cpu == "arm") {
+       arm_fpu = "vfpv3-d16"
+     }
+   }
+-} else if (current_cpu == "arm64" || target_cpu == "arm64") {
++} else if (current_cpu == "arm64" || v8_target_cpu == "arm64") {
+   # arm64 supports only "hard".
+   arm_float_abi = "hard"
+   arm_use_neon = true
+diff --git a/build/config/mips.gni b/build/config/mips.gni
+index cc6d53f..e23e748 100644
+--- a/build/config/mips.gni
++++ b/build/config/mips.gni
+@@ -2,7 +2,13 @@
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
+-if (current_cpu == "mipsel" || target_cpu == "mipsel") {
++import("//build/config/v8_target_cpu.gni")
++
++# These are primarily relevant in current_cpu == "mips*" contexts, where
++# MIPS code is being compiled.  But they can also be relevant in the
++# other contexts when the code will change its behavior based on the
++# cpu it wants to generate code for.
++if (current_cpu == "mipsel" || v8_target_cpu == "mipsel") {
+   declare_args() {
+     # MIPS arch variant. Possible values are:
+     #   "r1"
+@@ -27,7 +33,7 @@ if (current_cpu == "mipsel" || target_cpu == "mipsel") {
+     #   "fpxx": sets the GCC -mfpxx option.
+     mips_fpu_mode = "fp32"
+   }
+-} else if (current_cpu == "mips64el" || target_cpu == "mips64el") {
++} else if (current_cpu == "mips64el" || v8_target_cpu == "mips64el") {
+   # MIPS arch variant. Possible values are:
+   #   "r2"
+   #   "r6"
+diff --git a/build/config/v8_target_cpu.gni b/build/config/v8_target_cpu.gni
+new file mode 100644
+index 0000000..32e53c19
+--- /dev/null
++++ b/build/config/v8_target_cpu.gni
+@@ -0,0 +1,33 @@
++# Copyright 2016 The Chromium Authors. All rights reserved.
++# Use of this source code is governed by a BSD-style license that can be
++# found in the LICENSE file.
++
++import("//build/config/sanitizers/sanitizers.gni")
++
++declare_args() {
++  # This arg is used when we want to tell the JIT-generating v8 code
++  # that we want to have it generate for an architecture that is different
++  # than the architecture that v8 will actually run on; we then run the
++  # code under an emulator. For example, we might run v8 on x86, but
++  # generate arm code and run that under emulation.
++  #
++  # This arg is defined here rather than in the v8 project because we want
++  # some of the common architecture-specific args (like arm_float_abi or
++  # mips_arch_variant) to be set to their defaults either if the current_cpu
++  # applies *or* if the v8_target_cpu applies.
++  #
++  # TODO(crbug.com/620527) - rework this whole approach so that it isn't
++  # v8-specific.
++  v8_target_cpu = ""
++}
++
++if (v8_target_cpu == "") {
++  if (is_msan) {
++    # Running the V8-generated code on an ARM simulator is a powerful hack that
++    # allows the tool to see the memory accesses from JITted code. Without this
++    # flag, JS code causes false positive reports from MSan.
++    v8_target_cpu = "arm64"
++  } else {
++    v8_target_cpu = target_cpu
++  }
++}
+-- 
+2.7.4
+

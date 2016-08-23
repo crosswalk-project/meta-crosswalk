@@ -1,0 +1,76 @@
+Upstream-Status: Backport
+
+[this is actually patch for the v8 git repository]
+
+Signed-off-by: Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
+---
+From 52c4010ff79707fe76129a73f3930886ff2049b9 Mon Sep 17 00:00:00 2001
+From: machenbach <machenbach@chromium.org>
+Date: Tue, 24 May 2016 03:39:57 -0700
+Subject: [PATCH] [gn] Fix setting v8_target_arch default
+
+This moves setting the v8_target_arch default to the shared
+v8.gni, so that it's available in build_overrides for
+stand-alone mode.
+
+BUG=chromium:605732, chromium:474921
+NOTRY=true
+
+Review-Url: https://codereview.chromium.org/2006213002
+Cr-Commit-Position: refs/heads/master@{#36465}
+---
+ BUILD.gn   | 11 -----------
+ gni/v8.gni | 13 +++++++++++++
+ 2 files changed, 13 insertions(+), 11 deletions(-)
+
+diff --git a/v8/BUILD.gn b/v8/BUILD.gn
+index 0641aa6..97bb7a3 100644
+--- a/v8/BUILD.gn
++++ b/v8/BUILD.gn
+@@ -69,17 +69,6 @@ declare_args() {
+ v8_random_seed = "314159265"
+ v8_toolset_for_shell = "host"
+ 
+-if (v8_target_arch == "") {
+-  if (is_msan) {
+-    # Running the V8-generated code on an ARM simulator is a powerful hack that
+-    # allows the tool to see the memory accesses from JITted code. Without this
+-    # flag, JS code causes false positive reports from MSan.
+-    v8_target_arch = "arm64"
+-  } else {
+-    v8_target_arch = target_cpu
+-  }
+-}
+-
+ if (v8_use_snapshot && v8_use_external_startup_data) {
+   snapshot_target = ":v8_external_snapshot"
+ } else if (v8_use_snapshot) {
+diff --git a/v8/gni/v8.gni b/v8/gni/v8.gni
+index 81fcfbf..6a24219 100644
+--- a/v8/gni/v8.gni
++++ b/v8/gni/v8.gni
+@@ -2,8 +2,21 @@
+ # Use of this source code is governed by a BSD-style license that can be
+ # found in the LICENSE file.
+ 
++import("//build/config/sanitizers/sanitizers.gni")
++
+ declare_args() {
+   # V8 generates code for this architecture. If v8_target_arch differs from
+   # target_cpu, a simulator will be run.
+   v8_target_arch = ""
+ }
++
++if (v8_target_arch == "") {
++  if (is_msan) {
++    # Running the V8-generated code on an ARM simulator is a powerful hack that
++    # allows the tool to see the memory accesses from JITted code. Without this
++    # flag, JS code causes false positive reports from MSan.
++    v8_target_arch = "arm64"
++  } else {
++    v8_target_arch = target_cpu
++  }
++}
+-- 
+2.7.4
+

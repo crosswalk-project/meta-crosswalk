@@ -1,0 +1,131 @@
+Upstream-Status: Backport
+
+Signed-off-by: Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
+---
+From 983625d272c1b35a6297dd02c51fd1ee0fce3230 Mon Sep 17 00:00:00 2001
+From: "raphael.kubo.da.costa" <raphael.kubo.da.costa@intel.com>
+Date: Thu, 11 Aug 2016 02:58:01 -0700
+Subject: [PATCH] Remove base::internal::InotifyReader's destructor.
+
+InotifyReader is instantiated as a base::LazyInstance::Leaky object,
+which is never properly destroyed, since commit 18c0fac7d ("Make
+InotifyReader a leaky lazy instance").
+
+Having a destructor that is never called causes build issues with GCC
+6.1.1, so we can just remove it altogether:
+
+  ../../base/files/file_path_watcher_linux.cc:276:1: error: 'base::{anonymous}::InotifyReader::~InotifyReader()' defined but not used [-Werror=unused-function]
+
+While here, also remove all code related to |shutdown_pipe_| since it
+was only used in conjunction with ~InotifyReader().
+
+R=dcheng@chromium.org,mnissler@chromium.org,danakj@chromium.org,thestig@chromium.org
+BUG=636346
+
+Review-Url: https://codereview.chromium.org/2236523002
+Cr-Commit-Position: refs/heads/master@{#411294}
+---
+ base/files/file_path_watcher_linux.cc | 42 ++++++-----------------------------
+ 1 file changed, 7 insertions(+), 35 deletions(-)
+
+diff --git a/base/files/file_path_watcher_linux.cc b/base/files/file_path_watcher_linux.cc
+index 87bddd3..2444b44 100644
+--- a/base/files/file_path_watcher_linux.cc
++++ b/base/files/file_path_watcher_linux.cc
+@@ -66,7 +66,9 @@ class InotifyReader {
+   typedef std::set<FilePathWatcherImpl*> WatcherSet;
+ 
+   InotifyReader();
+-  ~InotifyReader();
++  // There is no destructor because |g_inotify_reader| is a
++  // base::LazyInstace::Leaky object. Having a destructor causes build
++  // issues with GCC 6 (http://crbug.com/636346).
+ 
+   // We keep track of which delegates want to be notified on which watches.
+   hash_map<Watch, WatcherSet> watchers_;
+@@ -80,9 +82,6 @@ class InotifyReader {
+   // File descriptor returned by inotify_init.
+   const int inotify_fd_;
+ 
+-  // Use self-pipe trick to unblock select during shutdown.
+-  int shutdown_pipe_[2];
+-
+   // Flag set to true when startup was successful.
+   bool valid_;
+ 
+@@ -194,13 +193,10 @@ class FilePathWatcherImpl : public FilePathWatcher::PlatformDelegate,
+   DISALLOW_COPY_AND_ASSIGN(FilePathWatcherImpl);
+ };
+ 
+-void InotifyReaderCallback(InotifyReader* reader, int inotify_fd,
+-                           int shutdown_fd) {
++void InotifyReaderCallback(InotifyReader* reader, int inotify_fd) {
+   // Make sure the file descriptors are good for use with select().
+   CHECK_LE(0, inotify_fd);
+   CHECK_GT(FD_SETSIZE, inotify_fd);
+-  CHECK_LE(0, shutdown_fd);
+-  CHECK_GT(FD_SETSIZE, shutdown_fd);
+ 
+   trace_event::TraceLog::GetInstance()->SetCurrentThreadBlocksMessageLoop();
+ 
+@@ -208,20 +204,15 @@ void InotifyReaderCallback(InotifyReader* reader, int inotify_fd,
+     fd_set rfds;
+     FD_ZERO(&rfds);
+     FD_SET(inotify_fd, &rfds);
+-    FD_SET(shutdown_fd, &rfds);
+ 
+     // Wait until some inotify events are available.
+     int select_result =
+-      HANDLE_EINTR(select(std::max(inotify_fd, shutdown_fd) + 1,
+-                          &rfds, NULL, NULL, NULL));
++      HANDLE_EINTR(select(inotify_fd + 1, &rfds, NULL, NULL, NULL));
+     if (select_result < 0) {
+       DPLOG(WARNING) << "select failed";
+       return;
+     }
+ 
+-    if (FD_ISSET(shutdown_fd, &rfds))
+-      return;
+-
+     // Adjust buffer size to current event queue size.
+     int buffer_size;
+     int ioctl_result = HANDLE_EINTR(ioctl(inotify_fd, FIONREAD,
+@@ -263,33 +254,14 @@ InotifyReader::InotifyReader()
+   if (inotify_fd_ < 0)
+     PLOG(ERROR) << "inotify_init() failed";
+ 
+-  shutdown_pipe_[0] = -1;
+-  shutdown_pipe_[1] = -1;
+-  if (inotify_fd_ >= 0 && pipe(shutdown_pipe_) == 0 && thread_.Start()) {
++  if (inotify_fd_ >= 0 && thread_.Start()) {
+     thread_.task_runner()->PostTask(
+         FROM_HERE,
+-        Bind(&InotifyReaderCallback, this, inotify_fd_, shutdown_pipe_[0]));
++        Bind(&InotifyReaderCallback, this, inotify_fd_));
+     valid_ = true;
+   }
+ }
+ 
+-InotifyReader::~InotifyReader() {
+-  if (valid_) {
+-    // Write to the self-pipe so that the select call in InotifyReaderTask
+-    // returns.
+-    ssize_t ret = HANDLE_EINTR(write(shutdown_pipe_[1], "", 1));
+-    DPCHECK(ret > 0);
+-    DCHECK_EQ(ret, 1);
+-    thread_.Stop();
+-  }
+-  if (inotify_fd_ >= 0)
+-    close(inotify_fd_);
+-  if (shutdown_pipe_[0] >= 0)
+-    close(shutdown_pipe_[0]);
+-  if (shutdown_pipe_[1] >= 0)
+-    close(shutdown_pipe_[1]);
+-}
+-
+ InotifyReader::Watch InotifyReader::AddWatch(
+     const FilePath& path, FilePathWatcherImpl* watcher) {
+   if (!valid_)
+-- 
+2.7.4
+

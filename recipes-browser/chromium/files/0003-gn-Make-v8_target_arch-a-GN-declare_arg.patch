@@ -1,0 +1,105 @@
+Upstream-Status: Backport
+
+[this is actually patch for the v8 git repository]
+
+Signed-off-by: Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
+---
+From 3be95b712c2f5acfb189b60cb3e4ba3600a66ba8 Mon Sep 17 00:00:00 2001
+From: machenbach <machenbach@chromium.org>
+Date: Tue, 24 May 2016 01:54:42 -0700
+Subject: [PATCH] [gn] Make v8_target_arch a GN declare_arg()
+
+There are bots on the chromium.lkgr waterfall that need to
+be able to set v8_target_arch to "arm" while the rest of
+the target build is "x86". This CL makes that argument
+a declare_arg(), so that we can do that.
+
+BUG=chromium:605732,chromium:474921
+NOTRY=true
+
+Review-Url: https://codereview.chromium.org/2007843002
+Cr-Commit-Position: refs/heads/master@{#36464}
+---
+ BUILD.gn               | 19 ++++++++++---------
+ build_overrides/v8.gni |  6 +-----
+ gni/v8.gni             |  9 +++++++++
+ 3 files changed, 20 insertions(+), 14 deletions(-)
+ create mode 100644 gni/v8.gni
+
+diff --git a/v8/BUILD.gn b/v8/BUILD.gn
+index 83e44d7..0641aa6 100644
+--- a/v8/BUILD.gn
++++ b/v8/BUILD.gn
+@@ -11,8 +11,7 @@ if (is_android) {
+   import("//build/config/android/rules.gni")
+ }
+ 
+-# Because standalone V8 builds are not supported, assume this is part of a
+-# Chromium build.
++import("gni/v8.gni")
+ import("//build_overrides/v8.gni")
+ 
+ import("snapshot_toolchain.gni")
+@@ -70,13 +69,15 @@ declare_args() {
+ v8_random_seed = "314159265"
+ v8_toolset_for_shell = "host"
+ 
+-if (is_msan) {
+-  # Running the V8-generated code on an ARM simulator is a powerful hack that
+-  # allows the tool to see the memory accesses from JITted code. Without this
+-  # flag, JS code causes false positive reports from MSan.
+-  v8_target_arch = "arm64"
+-} else {
+-  v8_target_arch = target_cpu
++if (v8_target_arch == "") {
++  if (is_msan) {
++    # Running the V8-generated code on an ARM simulator is a powerful hack that
++    # allows the tool to see the memory accesses from JITted code. Without this
++    # flag, JS code causes false positive reports from MSan.
++    v8_target_arch = "arm64"
++  } else {
++    v8_target_arch = target_cpu
++  }
+ }
+ 
+ if (v8_use_snapshot && v8_use_external_startup_data) {
+diff --git a/v8/build_overrides/v8.gni b/v8/build_overrides/v8.gni
+index af5cbc8..719379d 100644
+--- a/v8/build_overrides/v8.gni
++++ b/v8/build_overrides/v8.gni
+@@ -4,16 +4,12 @@
+ 
+ import("//build/config/features.gni")
+ import("//build/config/ui.gni")
++import("//gni/v8.gni")
+ 
+ if (is_android) {
+   import("//build/config/android/config.gni")
+ }
+ 
+-declare_args() {
+-  # V8 generates code for this architecture.
+-  v8_target_arch = target_cpu
+-}
+-
+ if (((v8_target_arch == "ia32" ||
+       v8_target_arch == "x64" ||
+       v8_target_arch=="x87") &&
+diff --git a/v8/gni/v8.gni b/v8/gni/v8.gni
+new file mode 100644
+index 0000000..81fcfbf
+--- /dev/null
++++ b/v8/gni/v8.gni
+@@ -0,0 +1,9 @@
++# Copyright 2016 the V8 project authors. All rights reserved.
++# Use of this source code is governed by a BSD-style license that can be
++# found in the LICENSE file.
++
++declare_args() {
++  # V8 generates code for this architecture. If v8_target_arch differs from
++  # target_cpu, a simulator will be run.
++  v8_target_arch = ""
++}
+-- 
+2.7.4
+

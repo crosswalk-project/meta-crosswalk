@@ -1,0 +1,37 @@
+Upstream-Status: Backport
+
+[this is actually patch for the v8 git repository]
+
+Signed-off-by: Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
+---
+From fe8f31e864e42360da3ec2f1a7f8d75105d43989 Mon Sep 17 00:00:00 2001
+From: machenbach <machenbach@chromium.org>
+Date: Fri, 17 Jun 2016 00:42:42 -0700
+Subject: [PATCH] [gn] Fix another ia32/x86 typo.
+
+BUG=chromium:619503
+TBR=jochen@chromium.org, vogelheim@chromium.org, dpranke@chromium.org, thakis@chromium.org
+NOTRY=true
+
+Review-Url: https://codereview.chromium.org/2072203002
+Cr-Commit-Position: refs/heads/master@{#37052}
+---
+ build_overrides/v8.gni | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/v8/build_overrides/v8.gni b/v8/build_overrides/v8.gni
+index ef3d8f4..5dcd672 100644
+--- a/v8/build_overrides/v8.gni
++++ b/v8/build_overrides/v8.gni
+@@ -11,7 +11,7 @@ if (is_android) {
+   import("//build/config/android/config.gni")
+ }
+ 
+-if (((v8_target_cpu == "ia32" ||
++if (((v8_target_cpu == "x86" ||
+       v8_target_cpu == "x64" ||
+       v8_target_cpu=="x87") &&
+      (is_linux || is_mac)) ||
+-- 
+2.7.4
+

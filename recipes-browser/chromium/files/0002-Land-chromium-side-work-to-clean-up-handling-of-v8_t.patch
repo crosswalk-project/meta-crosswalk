@@ -1,0 +1,260 @@
+Upstream-Status: Backport
+
+[adapted to M52]
+
+Signed-off-by: Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
+---
+From 8a2de90db035b90a891f0b980ab6162fd3995499 Mon Sep 17 00:00:00 2001
+From: dpranke <dpranke@chromium.org>
+Date: Thu, 14 Jul 2016 13:08:37 -0700
+Subject: [PATCH] Land chromium-side work to clean up handling of v8_target_cpu
+ in the GN build.
+
+Currently v8_target_cpu can only be set to one particular architecture,
+and that won't work for monochrome/webview builds where we need
+to be able to build two different snapshots for two different architectures.
+
+The way things are set are also confusing for when you need to do builds
+for a target_cpu that is different from the host_cpu and the value of the
+v8_target_cpu might get out of sync between target and host.
+
+This change changes all that by making the cpu that v8 targets
+a function of the current toolchain (thus declaring a v8_current_cpu
+and using that instead).
+
+R=brettw@chromium.org, jochen@chromium.org, michaelbai@chromium.org
+
+BUG=625353
+
+Review-Url: https://codereview.chromium.org/2116183002
+Cr-Commit-Position: refs/heads/master@{#405551}
+---
+ BUILD.gn                               |  3 ++-
+ build/config/arm.gni                   |  4 ++--
+ build/config/mips.gni                  |  4 ++--
+ build/config/sanitizers/sanitizers.gni |  3 +++
+ build/config/v8_target_cpu.gni         | 38 +++++++++++++++++++++++++++-------
+ build/toolchain/gcc_toolchain.gni      | 18 +++++++++++++++-
+ build/toolchain/linux/BUILD.gn         | 12 +++++++++++
+ chrome/test/base/js2gtest.gni          |  4 ++--
+ 8 files changed, 71 insertions(+), 15 deletions(-)
+
+diff --git a/build/config/arm.gni b/build/config/arm.gni
+index 326a49e..cc468d8 100644
+--- a/build/config/arm.gni
++++ b/build/config/arm.gni
+@@ -8,7 +8,7 @@ import("//build/config/v8_target_cpu.gni")
+ # ARM code is being compiled.  But they can also be relevant in the
+ # other contexts when the code will change its behavior based on the
+ # cpu it wants to generate code for.
+-if (current_cpu == "arm" || v8_target_cpu == "arm") {
++if (current_cpu == "arm" || v8_current_cpu == "arm") {
+   declare_args() {
+     # Version of the ARM processor when compiling on ARM. Ignored on non-ARM
+     # platforms.
+@@ -87,7 +87,7 @@ if (current_cpu == "arm" || v8_target_cpu == "arm") {
+       arm_fpu = "vfpv3-d16"
+     }
+   }
+-} else if (current_cpu == "arm64" || v8_target_cpu == "arm64") {
++} else if (current_cpu == "arm64" || v8_current_cpu == "arm64") {
+   # arm64 supports only "hard".
+   arm_float_abi = "hard"
+   arm_use_neon = true
+diff --git a/build/config/mips.gni b/build/config/mips.gni
+index e23e748..c25b267 100644
+--- a/build/config/mips.gni
++++ b/build/config/mips.gni
+@@ -8,7 +8,7 @@ import("//build/config/v8_target_cpu.gni")
+ # MIPS code is being compiled.  But they can also be relevant in the
+ # other contexts when the code will change its behavior based on the
+ # cpu it wants to generate code for.
+-if (current_cpu == "mipsel" || v8_target_cpu == "mipsel") {
++if (current_cpu == "mipsel" || v8_current_cpu == "mipsel") {
+   declare_args() {
+     # MIPS arch variant. Possible values are:
+     #   "r1"
+@@ -33,7 +33,7 @@ if (current_cpu == "mipsel" || v8_target_cpu == "mipsel") {
+     #   "fpxx": sets the GCC -mfpxx option.
+     mips_fpu_mode = "fp32"
+   }
+-} else if (current_cpu == "mips64el" || v8_target_cpu == "mips64el") {
++} else if (current_cpu == "mips64el" || v8_current_cpu == "mips64el") {
+   # MIPS arch variant. Possible values are:
+   #   "r2"
+   #   "r6"
+diff --git a/build/config/sanitizers/sanitizers.gni b/build/config/sanitizers/sanitizers.gni
+index da79bd7..2cb45f8 100644
+--- a/build/config/sanitizers/sanitizers.gni
++++ b/build/config/sanitizers/sanitizers.gni
+@@ -113,3 +113,6 @@ assert(!using_sanitizer || is_clang,
+ assert(
+     !is_debug || !(is_msan || is_lsan || is_tsan || is_ubsan || is_ubsan_vptr),
+     "Sanitizers should generally be used in release (set is_debug=false).")
++
++assert(!is_msan || (is_linux && current_cpu == "x64"),
++       "MSan currently only works on 64-bit Linux and ChromeOS builds.")
+diff --git a/build/config/v8_target_cpu.gni b/build/config/v8_target_cpu.gni
+index 32e53c19..6a7c1a3 100644
+--- a/build/config/v8_target_cpu.gni
++++ b/build/config/v8_target_cpu.gni
+@@ -14,20 +14,44 @@ declare_args() {
+   # This arg is defined here rather than in the v8 project because we want
+   # some of the common architecture-specific args (like arm_float_abi or
+   # mips_arch_variant) to be set to their defaults either if the current_cpu
+-  # applies *or* if the v8_target_cpu applies.
++  # applies *or* if the v8_current_cpu applies.
+   #
+-  # TODO(crbug.com/620527) - rework this whole approach so that it isn't
+-  # v8-specific.
++  # As described below, you can also specify the v8_target_cpu to use
++  # indirectly by specifying a `custom_toolchain` that contains v8_$cpu in the
++  # name after the normal toolchain.
++  #
++  # For example, `gn gen --args="custom_toolchain=...:clang_x64_v8_arm64"`
++  # is equivalent to setting --args=`v8_target_cpu="arm64"`. Setting
++  # `custom_toolchain` is more verbose but makes the toolchain that is
++  # (effectively) being used explicit.
++  #
++  # v8_target_cpu can only be used to target one architecture in a build,
++  # so if you wish to build multiple copies of v8 that are targetting
++  # different architectures, you will need to do something more
++  # complicated involving multiple toolchains along the lines of
++  # custom_toolchain, above.
+   v8_target_cpu = ""
+ }
+ 
+ if (v8_target_cpu == "") {
+-  if (is_msan) {
+-    # Running the V8-generated code on an ARM simulator is a powerful hack that
+-    # allows the tool to see the memory accesses from JITted code. Without this
+-    # flag, JS code causes false positive reports from MSan.
++  if (current_toolchain == "//build/toolchain/linux:clang_x64_v8_arm64" ||
++      current_toolchain == "//build/toolchain/linux:x64_v8_arm64") {
++    v8_target_cpu = "arm64"
++  } else if (current_toolchain == "//build/toolchain/linux:clang_x86_v8_arm" ||
++             current_toolchain == "//build/toolchain/linux:x86_v8_arm") {
++    v8_target_cpu = "arm"
++  } else if (is_msan) {
++    # If we're running under a sanitizer, if we configure v8 to generate
++    # code that will be run under a simulator, then the generated code
++    # also gets the benefits of the sanitizer.
+     v8_target_cpu = "arm64"
+   } else {
+     v8_target_cpu = target_cpu
+   }
+ }
++
++declare_args() {
++  # This argument is declared here so that it can be overridden in toolchains.
++  # It should never be explicitly set by the user.
++  v8_current_cpu = v8_target_cpu
++}
+diff --git a/build/toolchain/gcc_toolchain.gni b/build/toolchain/gcc_toolchain.gni
+index 3fe0034..5ecabe5 100644
+--- a/build/toolchain/gcc_toolchain.gni
++++ b/build/toolchain/gcc_toolchain.gni
+@@ -5,6 +5,7 @@
+ import("//build/config/clang/clang.gni")
+ import("//build/config/nacl/config.gni")
+ import("//build/config/sanitizers/sanitizers.gni")
++import("//build/config/v8_target_cpu.gni")
+ import("//build/toolchain/cc_wrapper.gni")
+ import("//build/toolchain/goma.gni")
+ import("//build/toolchain/toolchain.gni")
+@@ -99,6 +100,9 @@ import("//build/toolchain/concurrent_links.gni")
+ #  - use_gold
+ #      Override the global use_gold setting, useful if the particular
+ #      toolchain has a custom link step that is not actually using Gold.
++#  - v8_toolchain_cpu
++#      If defined, set v8_current_cpu to this, else set v8_current_cpu
++#      to current_cpu.
+ template("gcc_toolchain") {
+   toolchain(target_name) {
+     assert(defined(invoker.ar), "gcc_toolchain() must specify a \"ar\" value")
+@@ -465,6 +469,17 @@ template("gcc_toolchain") {
+       if (defined(invoker.use_sysroot)) {
+         use_sysroot = invoker.use_sysroot
+       }
++      if (defined(invoker.v8_toolchain_cpu)) {
++        v8_current_cpu = invoker.v8_toolchain_cpu
++      } else {
++        v8_current_cpu = current_cpu
++      }
++
++      # TODO(crbug.com/625353) - Delete after v8 has been updated
++      # to only refer to v8_current_cpu. Until then, we need to make
++      # sure that v8_current_cpu always has the same value as v8_target_cpu,
++      # so that //build defines evaluate the way v8 is expecting them to.
++      v8_current_cpu = v8_target_cpu
+ 
+       # Disable sanitizers for non-default toolchains.
+       is_asan = false
+@@ -523,10 +538,11 @@ template("clang_toolchain") {
+ 
+     forward_variables_from(invoker,
+                            [
++                             "strip",
+                              "toolchain_cpu",
+                              "toolchain_os",
+                              "use_gold",
+-                             "strip",
++                             "v8_toolchain_cpu",
+                            ])
+ 
+     if (defined(invoker.use_debug_fission)) {
+diff --git a/build/toolchain/linux/BUILD.gn b/build/toolchain/linux/BUILD.gn
+index 1fe3c7d..51e26cf 100644
+--- a/build/toolchain/linux/BUILD.gn
++++ b/build/toolchain/linux/BUILD.gn
+@@ -38,6 +38,12 @@ clang_toolchain("clang_x86") {
+   toolchain_os = "linux"
+ }
+ 
++clang_toolchain("clang_x86_v8_arm") {
++  toolchain_cpu = "x86"
++  v8_toolchain_cpu = "arm"
++  toolchain_os = "linux"
++}
++
+ gcc_toolchain("x86") {
+   cc = "gcc"
+   cxx = "g++"
+@@ -57,6 +63,12 @@ clang_toolchain("clang_x64") {
+   toolchain_os = "linux"
+ }
+ 
++clang_toolchain("clang_x64_v8_arm64") {
++  toolchain_cpu = "x64"
++  v8_toolchain_cpu = "arm64"
++  toolchain_os = "linux"
++}
++
+ gcc_toolchain("x64") {
+   cc = "gcc"
+   cxx = "g++"
+diff --git a/chrome/test/base/js2gtest.gni b/chrome/test/base/js2gtest.gni
+index c4fde1f..50d3c84 100644
+--- a/chrome/test/base/js2gtest.gni
++++ b/chrome/test/base/js2gtest.gni
+@@ -37,7 +37,7 @@ template("js2gtest") {
+ 
+     sources = invoker.sources
+ 
+-    v8_shell_path = get_label_info("//v8:v8_shell($snapshot_toolchain)",
++    v8_shell_path = get_label_info("//v8:v8_shell($v8_snapshot_toolchain)",
+                                    "root_out_dir") + "/v8_shell"
+     if (is_win) {
+       v8_shell_path += ".exe"
+@@ -90,7 +90,7 @@ template("js2gtest") {
+     ]
+ 
+     deps = [
+-      "//v8:v8_shell($snapshot_toolchain)",
++      "//v8:v8_shell($v8_snapshot_toolchain)",
+     ]
+     if (defined(invoker.deps)) {
+       deps += invoker.deps
+-- 
+2.7.4
+

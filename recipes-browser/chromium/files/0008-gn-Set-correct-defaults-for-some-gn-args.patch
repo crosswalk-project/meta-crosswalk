@@ -1,0 +1,94 @@
+Upstream-Status: Backport
+
+[this is actually patch for the v8 git repository]
+
+Signed-off-by: Raphael Kubo da Costa <raphael.kubo.da.costa@intel.com>
+---
+From 911ff2672e68285f39887cee18fece46145d87c9 Mon Sep 17 00:00:00 2001
+From: machenbach <machenbach@chromium.org>
+Date: Fri, 15 Jul 2016 07:40:51 -0700
+Subject: [PATCH] [gn] Set correct defaults for some gn args
+
+This sets default values for v8_enable_gdbjit and
+v8_imminent_deprecation_warnings, while allowing to override
+them as gn args.
+
+Without this patch the project-specific overrides have no
+effect.
+
+BUG=chromium:474921, chromium:626064
+
+Review-Url: https://codereview.chromium.org/2153753002
+Cr-Commit-Position: refs/heads/master@{#37797}
+---
+ BUILD.gn               | 21 +++++++++++++++++++--
+ build_overrides/v8.gni |  4 ++--
+ 2 files changed, 21 insertions(+), 4 deletions(-)
+
+diff --git a/v8/BUILD.gn b/v8/BUILD.gn
+index 80a2472..08e37b4 100644
+--- a/v8/BUILD.gn
++++ b/v8/BUILD.gn
+@@ -26,7 +26,7 @@ declare_args() {
+   v8_deprecation_warnings = false
+ 
+   # Enable compiler warnings when using V8_DEPRECATE_SOON apis.
+-  v8_imminent_deprecation_warnings = false
++  v8_imminent_deprecation_warnings = ""
+ 
+   # Embeds the given script into the snapshot.
+   v8_embed_script = ""
+@@ -38,7 +38,7 @@ declare_args() {
+   v8_enable_disassembler = false
+ 
+   # Sets -dENABLE_GDB_JIT_INTERFACE.
+-  v8_enable_gdbjit = false
++  v8_enable_gdbjit = ""
+ 
+   # Sets -dENABLE_HANDLE_ZAPPING.
+   v8_enable_handle_zapping = true
+@@ -69,6 +69,23 @@ declare_args() {
+   v8_use_mips_abi_hardfloat = true
+ }
+ 
++# Set project-specific defaults for some args if not provided in args.gn. The
++# defaults can be set in the respective build_overrides files.
++if (v8_imminent_deprecation_warnings == "") {
++  if (defined(v8_imminent_deprecation_warnings_default)) {
++    v8_imminent_deprecation_warnings = v8_imminent_deprecation_warnings_default
++  } else {
++    v8_imminent_deprecation_warnings = false
++  }
++}
++if (v8_enable_gdbjit == "") {
++  if (defined(v8_enable_gdbjit_default)) {
++    v8_enable_gdbjit = v8_enable_gdbjit_default
++  } else {
++    v8_enable_gdbjit = false
++  }
++}
++
+ v8_random_seed = "314159265"
+ v8_toolset_for_shell = "host"
+ 
+diff --git a/v8/build_overrides/v8.gni b/v8/build_overrides/v8.gni
+index 5dcd672..7ba4d58 100644
+--- a/v8/build_overrides/v8.gni
++++ b/v8/build_overrides/v8.gni
+@@ -16,11 +16,11 @@
+       v8_target_cpu=="x87") &&
+      (is_linux || is_mac)) ||
+     (v8_target_cpu == "ppc64" && is_linux)) {
+-  v8_enable_gdbjit = true
++  v8_enable_gdbjit_default = true
+ }
+ 
+ icu_use_data_file_flag = false
+-v8_imminent_deprecation_warnings = true
++v8_imminent_deprecation_warnings_default = true
+ v8_optimized_debug = false
+ v8_extra_library_files = []
+ v8_experimental_extra_library_files = []
+-- 
+2.7.4
+
