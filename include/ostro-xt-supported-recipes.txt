@@ -1,0 +1,3 @@
+libevent@core
+libxscrnsaver@core
+nss@core
