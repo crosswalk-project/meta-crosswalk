@@ -359,6 +359,7 @@ SRC_URI += "\
     https://download.01.org/crosswalk/releases/crosswalk/source/crosswalk-${PV}.tar.xz;name=tarball \
     file://use_window_manager_native_decorations.patch \
     file://pick_yocto_compiler.patch \
+    file://Ostro-OS-XT-Fallback-MADV_FREE-to-MADV_DONTNEED.patch \
     file://include.gypi \
     "
 

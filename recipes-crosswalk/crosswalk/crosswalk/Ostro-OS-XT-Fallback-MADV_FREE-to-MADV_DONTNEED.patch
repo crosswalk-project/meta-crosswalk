@@ -1,0 +1,33 @@
+From 23ac8641cf1e51cb3b252db03ba89ec3a5d80063 Mon Sep 17 00:00:00 2001
+From: Ningxin Hu <ningxin@intel.com>
+Date: Fri, 9 Sep 2016 13:18:05 +0000
+Subject: [PATCH] [Ostro OS XT] Fallback MADV_FREE to MADV_DONTNEED
+
+MADV_FREE has wrong value on Ostro OS XT which causes madvise always
+returns -1. Fallback to MADV_DONTNEED.
+
+TODO=fix in Ostro OS XT upstream.
+---
+ third_party/WebKit/Source/wtf/PageAllocator.cpp | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/third_party/WebKit/Source/wtf/PageAllocator.cpp b/third_party/WebKit/Source/wtf/PageAllocator.cpp
+index 7f7a884..15377b0 100644
+--- a/third_party/WebKit/Source/wtf/PageAllocator.cpp
++++ b/third_party/WebKit/Source/wtf/PageAllocator.cpp
+@@ -42,6 +42,12 @@
+ 
+ #ifndef MADV_FREE
+ #define MADV_FREE MADV_DONTNEED
++#else
++// [Ostro OS XT] MADV_FREE has wrong value which causes madvise
++// always returns -1. Fallback to MADV_DONTNEED.
++// TODO: fix in Ostro OS XT upstream.
++#undef MADV_FREE
++#define MADV_FREE MADV_DONTNEED
+ #endif
+ 
+ #ifndef MAP_ANONYMOUS
+-- 
+2.8.4
+
